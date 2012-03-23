@@ -2,7 +2,7 @@ set(URBI_ROOT_DIR "/usr" CACHE PATH "Urbi root directory.")
 
 find_package (OpenCV REQUIRED)
 find_package (Urbi REQUIRED)
-find_package (Boost REQUIRED)
+find_package (Boost REQUIRED serialization)
 
 link_directories (${BOOST_LIBRARYDIR})
 
@@ -14,7 +14,7 @@ endif (WIN32)
 
 add_library (uknearest MODULE uknearest.cpp)
 
-target_link_libraries (uknearest ${OpenCV_LIBS} ${URBI_LIBRARIES})
+target_link_libraries (uknearest ${OpenCV_LIBS} ${URBI_LIBRARIES} ${Boost_LIBRARIES})
 
 set_target_properties (uknearest PROPERTIES
   PREFIX "")
