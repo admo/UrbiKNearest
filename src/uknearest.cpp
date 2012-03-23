@@ -49,10 +49,7 @@ using namespace boost::bimaps;
 
 class UKNearest: public urbi::UObject {
 
-	struct ClusterId {};
-	struct ClusterName {};
-
-	typedef bimap<tagged<int, ClusterId> , tagged<string, ClusterName> > ClusterMap;
+	typedef bimap<int, string> ClusterMap;
 	typedef ClusterMap::value_type Cluster;
 	typedef multimap<int, vector<double> > TrainData;
 
@@ -123,19 +120,19 @@ bool UKNearest::saveData(const string& filename) const {
 
 bool UKNearest::train(const vector<double> data, const string& label) {
 	// Sprawdz czy dany klaster istnieje, jesli nie to wstaw z kolejnym ID
-	if (mClusterMap->by<ClusterName>().count(label) == 0)
+	if (mClusterMap->right.count(label) == 0)
 		mClusterMap->insert(Cluster(mClusterMap->size(), label));
 
 	// Musi być conajmniej jeden element mClusters
 	assert(!mClusterMap->empty());
 
-	int response = mClusterMap->by<ClusterName>().at(label);
+	int response = mClusterMap->right.at(label);
 
 	mTrainData->insert(make_pair(response, data));
 
 	return mKnn->train(
 			Mat(vector<float>(data.begin(), data.end())).t(), // dane - double->float może wyjść inf
-			Mat(Size(1, 1), CV_32FC1, Scalar(mClusterMap->by<ClusterName>().at(label))), // odpowiedź
+			Mat(Size(1, 1), CV_32FC1, Scalar(mClusterMap->right.at(label))), // odpowiedź
 			Mat(),
 			false,
 			mMaxK,
@@ -148,9 +145,9 @@ string UKNearest::find(const vector<double> data, const int k) const {
 			Mat(vector<float>(data.begin(), data.end())).t(), k));
 
 	// Wynik klasyfikacji musi być zawarty w mapie
-	assert(mClusterMap->by<ClusterId>().count(response));
+	assert(mClusterMap->left.count(response));
 
-	return mClusterMap->by<ClusterId>().at(response);
+	return mClusterMap->left.at(response);
 }
 
 UStart(UKNearest);
