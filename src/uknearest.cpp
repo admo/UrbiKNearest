@@ -132,7 +132,7 @@ bool UKNearest::train(const vector<double> data, const string& label) {
 
 	return mKnn->train(
 			Mat(vector<float>(data.begin(), data.end())).t(), // dane - double->float może wyjść inf
-			Mat(Size(1, 1), CV_32FC1, Scalar(mClusterMap->right.at(label))), // odpowiedź
+			Mat(Size(1, 1), CV_32FC1, Scalar(response)), // odpowiedź
 			Mat(),
 			false,
 			mMaxK,
