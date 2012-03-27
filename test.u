@@ -66,6 +66,9 @@ u.train([252, 255], "white");
 u.train([252, 254], "white");
 u.train([125, 125], "gray");
 u.train([125, 124], "gray");
+
+u.train([1000,1000], "nothing");
+
 u.train([125, 123], "gray");
 u.train([125, 122], "gray");
 u.train([125, 121], "gray");
@@ -82,6 +85,9 @@ u.train([124, 121], "gray");
 u.train([124, 120], "gray");
 u.train([124, 119], "gray");
 u.train([124, 118], "gray");
+
+u.train([9000,9000], "nothingaaa");
+
 u.train([124, 117], "gray");
 u.train([124, 116], "gray");
 u.train([123, 125], "gray");
@@ -102,3 +108,10 @@ u.find([255,255],5);
 u.find([200,200],5);
 u.find([128,128],5);
 u.saveData("dane.xml");
+
+var w = UKNearest.new(32);
+w.loadData("dane.xml");
+w.find([0,0],5);
+w.find([255,255],5);
+w.find([200,200],5);
+w.find([128,128],5);

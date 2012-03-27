@@ -28,9 +28,11 @@
 #include <utility>
 #include <limits>
 #include <fstream>
+#include <iterator>
 
 #include <urbi/uobject.hh>
 
+#include <boost/bind.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <boost/bimap.hpp>
 #include <boost/archive/xml_iarchive.hpp>
@@ -49,9 +51,11 @@ using namespace boost::bimaps;
 
 class UKNearest: public urbi::UObject {
 
+	// Odwzorowanie <nr klastra, nazwa klastra>
 	typedef bimap<int, string> ClusterMap;
 	typedef ClusterMap::value_type Cluster;
-	typedef multimap<int, vector<double> > TrainData;
+	// Lista punktów <nr klastra, wartosc>
+	typedef multimap<int, vector<float> > TrainData;
 
 	friend class boost::serialization::access;
 	template<class Archive>
@@ -76,6 +80,11 @@ public:
 	// Find
 	string find(const vector<double>, const int k) const;
 
+	// Getty
+	int getMaxK() const;
+	int getVarCount() const;
+	int getSampleCount() const;
+
 private:
 	scoped_ptr<KNearest> mKnn;
 	scoped_ptr<ClusterMap> mClusterMap;
@@ -95,7 +104,7 @@ void UKNearest::init(const int maxK) {
 
 	mMaxK = maxK;
 
-	UBindFunctions(UKNearest, loadData, saveData, train, find);
+	UBindFunctions(UKNearest, loadData, saveData, train, find, getMaxK, getVarCount, getSampleCount);
 }
 
 bool UKNearest::loadData(const string& filename) {
@@ -103,7 +112,28 @@ bool UKNearest::loadData(const string& filename) {
 
 	boost::archive::xml_iarchive ia(ifs);
 
+	// Uzupełnienie mTrainData, mMaxK, mClusters z pliku filename
 	ia >> boost::serialization::make_nvp("UKNearest", *this);
+        
+    // Pobranie wszystkich kluczy do responses z mClusters
+    vector<float> responses(mTrainData->size());
+    transform(mTrainData->begin(), mTrainData->end(), responses.begin(), bind(&TrainData::value_type::first, _1));
+
+    // Pobranie danych trenujących
+    // Ustawienie rozmiaru macierzy z danymi trenującymi
+    Mat matSamples(responses.size(), mTrainData->begin()->second.size(), CV_32FC1);
+
+    MatIterator_<float> it = matSamples.begin<float>();
+    // Dla każdej danej pomiarowej
+    for (TrainData::const_iterator i = mTrainData->begin(); i != mTrainData->end(); ++i) {
+    	// Skopiuj całą daną pomiarową
+    	std::copy(i->second.begin(), i->second.end(), it);
+    	// Przesuń się w macierzy matSamples o wymiar danej pomiarowej
+    	it += i->second.size();
+    }
+
+    // Trenowanie klasyfikatora wczytanymi danymi
+    mKnn.reset(new CvKNearest(matSamples, Mat(responses).t(), Mat(), false, mMaxK));
 
 	return true;
 }
@@ -119,6 +149,9 @@ bool UKNearest::saveData(const string& filename) const {
 }
 
 bool UKNearest::train(const vector<double> data, const string& label) {
+	// Pobierz ilość sampli (w celach testów)
+	int samplesCount = mKnn->get_sample_count();
+
 	// Sprawdz czy dany klaster istnieje, jesli nie to wstaw z kolejnym ID
 	if (mClusterMap->right.count(label) == 0)
 		mClusterMap->insert(Cluster(mClusterMap->size(), label));
@@ -128,15 +161,28 @@ bool UKNearest::train(const vector<double> data, const string& label) {
 
 	int response = mClusterMap->right.at(label);
 
-	mTrainData->insert(make_pair(response, data));
+	// Zrzutuj wektor danych na vector<float>
+	vector<float> dataFloat(data.begin(), data.end());
+	// Dodaj do multimapy danych trenujących z nr klastra
+	mTrainData->insert(make_pair(response, dataFloat));
 
-	return mKnn->train(
-			Mat(vector<float>(data.begin(), data.end())).t(), // dane - double->float może wyjść inf
-			Mat(Size(1, 1), CV_32FC1, Scalar(response)), // odpowiedź
-			Mat(),
-			false,
-			mMaxK,
-			mKnn->get_sample_count() != 0); // Czy update
+	try {
+		return mKnn->train(
+				Mat(dataFloat).t(), // dane - double->float może wyjść inf
+				Mat(Size(1, 1), CV_32FC1, Scalar(response)), // odpowiedź
+				Mat(),
+				false,
+				mMaxK,
+				mKnn->get_sample_count() != 0); // Czy update
+	} catch (...) {
+		// Sprawdz czy pomimo błędu nie powstały nowe klastry
+		assert(samplesCount == mKnn->get_sample_count());
+
+		// Usuń dodany na początku klaster
+		mClusterMap->right.erase(label);
+		throw;
+	}
+	return false;
 }
 
 string UKNearest::find(const vector<double> data, const int k) const {
@@ -148,6 +194,18 @@ string UKNearest::find(const vector<double> data, const int k) const {
 	assert(mClusterMap->left.count(response));
 
 	return mClusterMap->left.at(response);
+}
+
+int UKNearest::getMaxK() const {
+	return mKnn->get_max_k();
+}
+
+int UKNearest::getVarCount() const {
+	return mKnn->get_var_count();
+}
+
+int UKNearest::getSampleCount() const {
+	return mKnn->get_sample_count();
 }
 
 UStart(UKNearest);
